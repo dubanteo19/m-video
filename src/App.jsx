@@ -81,6 +81,13 @@ export default function App() {
 
   const validateFiles = (files) => {
     if (!files || files.length === 0) return;
+    // Validate the number of files
+    if ((files.length > 5)) {
+      alert('You can only upload up to 5 files at a time');
+      return false;
+    }
+    
+    // Validate the file size
     for (let f of files) {
       if (f.size > 1024 * 1024 * 100) {
         alert('File size exceeds 100MB');
@@ -266,7 +273,7 @@ export default function App() {
       {/* RIGHT PANEL */}
       <div style={{ flex: 1, padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000' }}>
         {selected ? (
-          <video key={selected} controls style={{ maxWidth: '100%', maxHeight: '100%' }}>
+          <video muted autoPlay key={selected} controls style={{ maxWidth: '100%', maxHeight: '100%' }}>
             <source src={`${API}/stream/${userName}/${encodeURIComponent(selected)}`} type="video/mp4" />
           </video>
         ) : (
