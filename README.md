@@ -14,7 +14,7 @@ https://github.com/user-attachments/assets/f76c3a14-94b7-44d1-a14c-cfe75428ee30
 ## Setup
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/dubanteo19/m-video.git
 cd m-video
 npm install
 npm start
