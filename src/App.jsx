@@ -13,7 +13,6 @@ export default function App() {
   const [videos, setVideos] = useState([]);
   const [selected, setSelected] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [copied, setCopied] = useState(false);
   const hasLoadedInitially = useRef(false);
   const [highlightedFile, setHighlightedFile] = useState(null);
   const updateVideoList = async () => {
@@ -23,9 +22,12 @@ export default function App() {
       setVideos(data);
       if (data.length > 0) {
         if (!hasLoadedInitially.current) {
-          setSelected(data[0]);
+          const selectedParam = queryParams.get('v');
+          const selected = selectedParam ? decodeURIComponent(selectedParam) : data[0];
+          setSelected(selected);
           hasLoadedInitially.current = true;
         }
+
       } else {
         setSelected(null);
       }
@@ -86,11 +88,11 @@ export default function App() {
       alert('You can only upload up to 5 files at a time');
       return false;
     }
-    
+
     // Validate the file size
     for (let f of files) {
-      if (f.size > 1024 * 1024 * 100) {
-        alert('File size exceeds 100MB');
+      if (f.size > 1024 * 1024 * 500) {
+        alert('File size exceeds 500MB');
         return false;
       }
     }
@@ -109,36 +111,7 @@ export default function App() {
     }
   };
 
-  const onShareLink = () => {
-    const urlToCopy = `${window.location.origin}/${userName}`;
 
-    const textArea = document.createElement("textarea");
-    textArea.value = urlToCopy;
-
-    textArea.style.position = "fixed";
-    textArea.style.left = "-9999px";
-    textArea.style.top = "0";
-
-    document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
-
-    try {
-      const successful = document.execCommand('copy');
-      if (successful) setCopied(true);
-    } catch (err) {
-      console.error("Fallback copy failed", err);
-    }
-
-    document.body.removeChild(textArea);
-  };
-  useEffect(() => {
-    if (copied) {
-      setTimeout(() => {
-        setCopied(false);
-      }, 2000);
-    }
-  }, [copied]);
   const onDeleteVideo = async (filename) => {
     const confirm = window.confirm(`Delete "${filename}"?`);
     if (!confirm) return;
@@ -168,6 +141,31 @@ export default function App() {
       window.location.href = newUrl.toString();
     }
   };
+
+  const onShareLink = (filename) => {
+    const encodedFilename = encodeURIComponent(filename);
+    const urlToCopy = `${window.location.origin}/${userName}/?v=${encodedFilename}`;
+
+    const textArea = document.createElement("textarea");
+    textArea.value = urlToCopy;
+
+    textArea.style.position = "fixed";
+    textArea.style.left = "-9999px";
+    textArea.style.top = "0";
+
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+
+    try {
+      const successful = document.execCommand('copy');
+      if (successful) triggerHighlight(filename);
+    } catch (err) {
+      console.error("Fallback copy failed", err);
+    }
+
+    document.body.removeChild(textArea);
+  };
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'system-ui', color: '#333' }}>
       {/* LEFT PANEL */}
@@ -195,16 +193,7 @@ export default function App() {
                 }} href={`/${userName}`}>
                   <EyeIcon color='#007bff' />
                 </a>
-                <button type='button' onClick={onShareLink} style={
-                  {
-                    padding: '5px 10px',
-                    background: 'none',
-                    border: '1px solid red',
-                    borderRadius: '5px',
-                    color: 'red',
-                    fontSize: '0.8rem'
-                  }
-                }>{copied ? 'Link copied' : 'Share link'}</button>
+
 
               </div>
               <div style={{ height: '200px' }}>
@@ -263,6 +252,7 @@ export default function App() {
               filename={v}
               isSelected={selected === v}
               isUploader={isUploader}
+              onShareLink={(name) => onShareLink(name)}
               onSelect={(name) => setSelected(name)}
               onDelete={(name) => onDeleteVideo(name)}
             />

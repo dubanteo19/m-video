@@ -1,14 +1,17 @@
 import { useState } from 'react';
+import { ShareIcon } from './icons/share-icon';
+
 export const VideoItem = ({
     filename,
     isSelected,
     isUploader,
     onSelect,
     onDelete,
+    onShareLink,
     isHighlighted
 }) => {
     const [isHovered, setIsHovered] = useState(false);
-
+    const [copied, setCopied] = useState(false);
     // Styles defined as objects for cleaner JSX
     const containerStyle = {
         position: 'relative',
@@ -25,6 +28,16 @@ export const VideoItem = ({
         animation: isHighlighted ? 'shake 0.5s' : 'none'
     };
 
+    const shareButtonStyle = {
+        position: 'absolute',
+        top: '5px',
+        right: isUploader ? '30px' : '0px',
+        padding: '5px',
+        background: copied ? 'rgba(0, 255, 0, 0.15)' : 'rgba(0, 0, 0, 0.15)',
+        borderRadius: '50%',
+        transition: 'all 0.2s ease',
+        border: 'none',
+    };
     const deleteButtonStyle = {
         position: 'absolute',
         top: '0px',
@@ -46,6 +59,7 @@ export const VideoItem = ({
         transition: 'all 0.2s ease',
     };
 
+
     return (
         <div
             style={containerStyle}
@@ -55,6 +69,19 @@ export const VideoItem = ({
         >
             {filename}
 
+
+            <button
+                title="Share link"
+                onClick={(e) => {
+                    e.stopPropagation();
+                    setCopied(true);
+                    onShareLink(filename);
+                    setTimeout(() => setCopied(false), 2000);
+                }}
+                style={shareButtonStyle}
+            >
+                <ShareIcon />
+            </button>
             {isUploader && (
                 <button
                     title="Delete video"
