@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { FileUploader } from './components/file-uploader';
-import { FullScreenLoader } from './components/loader';
 import { EyeIcon, FolderIcon, GlobeIcon, UploadIcon } from './components/icons';
+import { FullScreenLoader } from './components/loader';
+import { VideoCutterPlayer } from './components/video-cutter-player';
 import { VideoItem } from './components/video-item';
 const pathParts = window.location.pathname.split('/').filter(Boolean);
 const queryParams = new URLSearchParams(window.location.search);
@@ -15,6 +16,7 @@ export default function App() {
   const [isUploading, setIsUploading] = useState(false);
   const hasLoadedInitially = useRef(false);
   const [highlightedFile, setHighlightedFile] = useState(null);
+
   const updateVideoList = async () => {
     try {
       const res = await fetch(`${API}/list/${userName}`);
@@ -166,6 +168,37 @@ export default function App() {
 
     document.body.removeChild(textArea);
   };
+  // Inside App.js
+  const onDownloadVideo = async (start, end) => {
+    if (!selected) return;
+
+    // Append start and end timestamps safely into the endpoint search parameters query
+    const url = `${API}/download-video/${userName}/${encodeURIComponent(selected)}?start=${start}&end=${end}`;
+
+    try {
+      setIsUploading(true);
+
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Download request rejected by server.');
+
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `trimmed-${selected}`;
+      document.body.appendChild(link);
+      link.click();
+
+      link.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error("Trim extraction download sequence aborted:", err);
+      alert('Failed to download the trimmed file selection.');
+    } finally {
+      setIsUploading(false); // Clear screen loader overlay
+    }
+  };
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'system-ui', color: '#333' }}>
       {/* LEFT PANEL */}
@@ -263,9 +296,12 @@ export default function App() {
       {/* RIGHT PANEL */}
       <div style={{ flex: 1, padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000' }}>
         {selected ? (
-          <video muted autoPlay key={selected} controls style={{ maxWidth: '100%', maxHeight: '100%' }}>
-            <source src={`${API}/stream/${userName}/${encodeURIComponent(selected)}`} type="video/mp4" />
-          </video>
+          <VideoCutterPlayer
+            selectedVideo={selected}
+            userName={userName}
+            apiBaseUrl={API}
+            onDownload={onDownloadVideo}
+          />
         ) : (
           <div style={{ padding: '0px 20px', height: '90%', width: '100%' }}>
             <FileUploader onUploadFiles={uploadFiles} />

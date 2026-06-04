@@ -3,6 +3,8 @@ import multer from 'multer';
 import cors from 'cors';
 import fs from 'fs-extra';
 import path from 'path';
+import { spawn } from 'child_process';
+import { randomUUID } from 'crypto';
 import { fileURLToPath } from 'url';
 
 // Fix for __dirname in ES Modules
@@ -22,6 +24,71 @@ app.use(cors());
 app.use('/stream/:user', (req, res, next) => {
   const userDir = path.join(BASE_UPLOAD_DIR, req.params.user);
   express.static(userDir)(req, res, next);
+});
+
+// Absolute path to your existing executable
+const ffmpegPath = 'C:\\Users\\ISV51\\AppData\\Local\\Learnpulse\\Screenpresso\\FFmpeg\\ffmpeg.exe';
+
+app.get('/download-video/:user/:filename', (req, res) => {
+  const { user, filename } = req.params;
+  const { start, end } = req.query;
+  const filePath = path.join(BASE_UPLOAD_DIR, user, filename);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+
+  if (start === undefined || end === undefined) {
+    return res.download(filePath, filename);
+  }
+
+  const startTime = parseFloat(start);
+  const endTime = parseFloat(end);
+  const duration = endTime - startTime;
+
+  const tempFilename = `trim-${randomUUID()}.mp4`;
+  const tempFilePath = path.join(BASE_UPLOAD_DIR, user, tempFilename);
+
+  const args = [
+    '-ss', startTime.toString(),
+    '-i', filePath,
+    '-t', duration.toString(),
+    '-c:v', 'copy',
+    '-c:a', 'copy',
+    '-avoid_negative_ts', 'make_zero',
+    '-y',
+    tempFilePath
+  ];
+
+  const ffmpegProcess = spawn(ffmpegPath, args);
+
+  req.on('close', () => {
+    if (ffmpegProcess) ffmpegProcess.kill('SIGKILL');
+    if (fs.existsSync(tempFilePath)) {
+      fs.unlink(tempFilePath, () => { });
+    }
+  });
+
+  ffmpegProcess.on('error', (err) => {
+    console.error('Failed to start FFmpeg process:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'FFmpeg processing failure.' });
+    }
+  });
+
+  ffmpegProcess.on('close', (code) => {
+    if (code !== 0) {
+      console.error(`FFmpeg exited with error code ${code}`);
+      if (!res.headersSent) res.status(500).json({ error: 'Failed to slice video.' });
+      return;
+    }
+
+    res.download(tempFilePath, `trimmed-${filename}`, (err) => {
+      fs.unlink(tempFilePath, (unlinkErr) => {
+        if (unlinkErr) console.error('Failed to clean up temp file:', unlinkErr);
+      });
+    });
+  });
 });
 
 // Update Multer to use dynamic folders

@@ -30,9 +30,9 @@ export const VideoItem = ({
 
     const shareButtonStyle = {
         position: 'absolute',
-        top: '5px',
+        top: '0px',
         right: isUploader ? '30px' : '0px',
-        padding: '5px',
+        padding: '3px',
         background: copied ? 'rgba(0, 255, 0, 0.15)' : 'rgba(0, 0, 0, 0.15)',
         borderRadius: '50%',
         transition: 'all 0.2s ease',
