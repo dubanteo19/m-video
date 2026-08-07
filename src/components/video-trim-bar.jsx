@@ -136,7 +136,7 @@ export function VideoTrimBar({ duration, startTime, endTime, currentTime = 0, on
                         position: 'absolute',
                         left: `${startPercent}%`,
                         transform: 'translateX(-50%)',
-                        width: '14px',
+                        width: '8px',
                         height: '44px',
                         top: '-2px',
                         background: '#00E5FF',
@@ -156,7 +156,7 @@ export function VideoTrimBar({ duration, startTime, endTime, currentTime = 0, on
                     <div style={{
                         position: 'absolute',
                         bottom: '-20px',
-                        left: '50%',
+                        left: '10px',
                         color: '#00E5FF',
                         transform: 'translateX(-50%)',
                         fontSize: '0.8rem',
@@ -194,7 +194,7 @@ export function VideoTrimBar({ duration, startTime, endTime, currentTime = 0, on
                     <div style={{
                         position: 'absolute',
                         bottom: '-20px',
-                        left: '50%',
+                        left: '0',
                         color: '#00E5FF',
                         transform: 'translateX(-50%)',
                         fontSize: '0.8rem',

@@ -1,21 +1,28 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { FileUploader } from './components/file-uploader';
-import { EyeIcon, FolderIcon, GlobeIcon, UploadIcon } from './components/icons';
-import { FullScreenLoader } from './components/loader';
-import { VideoCutterPlayer } from './components/video-cutter-player';
-import { VideoItem } from './components/video-item';
-const pathParts = window.location.pathname.split('/').filter(Boolean);
+import React, { useEffect, useRef, useState } from "react";
+import { FileUploader } from "./components/file-uploader";
+import { EyeIcon, FolderIcon, GlobeIcon, UploadIcon } from "./components/icons";
+import { FullScreenLoader } from "./components/loader";
+import { VideoCutterPlayer } from "./components/video-cutter-player";
+import { VideoItem } from "./components/video-item";
+const pathParts = window.location.pathname.split("/").filter(Boolean);
 const queryParams = new URLSearchParams(window.location.search);
-const isUploader = queryParams.get('uploader') === 'true';
-const userName = pathParts[0] || 'public'; // Default to 'public' if URL is just /
+const isUploader = queryParams.get("uploader") === "true";
+const userName = pathParts[0] || "public"; // Default to 'public' if URL is just /
 const API = `http://${window.location.hostname}:5000`;
 
 export default function App() {
   const [videos, setVideos] = useState([]);
   const [selected, setSelected] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
-  const hasLoadedInitially = useRef(false);
   const [highlightedFile, setHighlightedFile] = useState(null);
+  const hasLoadedInitially = useRef(false);
+  const selectedRef = useRef(selected);
+
+  const [activeJobs, setActiveJobs] = useState({});
+
+  useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
 
   const updateVideoList = async () => {
     try {
@@ -24,12 +31,13 @@ export default function App() {
       setVideos(data);
       if (data.length > 0) {
         if (!hasLoadedInitially.current) {
-          const selectedParam = queryParams.get('v');
-          const selected = selectedParam ? decodeURIComponent(selectedParam) : data[0];
+          const selectedParam = queryParams.get("v");
+          const selected = selectedParam
+            ? decodeURIComponent(selectedParam)
+            : data[0].name;
           setSelected(selected);
           hasLoadedInitially.current = true;
         }
-
       } else {
         setSelected(null);
       }
@@ -42,28 +50,69 @@ export default function App() {
   const handleNewUploadSelection = async () => {
     const latestData = await updateVideoList();
     if (latestData && latestData.length > 0) {
-      setSelected(latestData[0]);
+      setSelected(latestData[0].name);
     }
   };
 
-  // 3. The Interval (Background Sync)
   useEffect(() => {
     updateVideoList();
-    const interval = setInterval(updateVideoList, 3000);
-    return () => clearInterval(interval);
-  }, []);
+
+    const eventSource = new EventSource(`${API}/events/${userName}`);
+
+    eventSource.onmessage = async (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        const { status, filename } = data;
+
+        if (status === "completed" || status === "failed") {
+          // Remove active state when finished
+          setActiveJobs((prev) => {
+            const next = { ...prev };
+            delete next[filename];
+            return next;
+          });
+
+          if (status === "completed") {
+            await updateVideoList();
+          }
+
+          if (status === "failed") {
+            console.error(`Compression failed for ${filename}:`, data.error);
+          }
+          return;
+        }
+
+        // Track ongoing status (queued, processing, progress)
+        if (["queued", "processing", "progress"].includes(status)) {
+          setActiveJobs((prev) => ({
+            ...prev,
+            [filename]: data,
+          }));
+        }
+      } catch (err) {
+        console.error("Error parsing SSE message:", err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error("SSE Connection error:", err);
+      eventSource.close();
+    };
+
+    return () => eventSource.close();
+  }, [userName]);
 
   // 4. The Upload Logic
   const uploadFiles = async (files) => {
     if (!validateFiles(files)) return;
     setIsUploading(true); // Show loader
     const fd = new FormData();
-    for (let f of files) fd.append('videos', f);
+    for (let f of files) fd.append("videos", f);
 
     try {
       const res = await fetch(`${API}/upload/${userName}`, {
-        method: 'POST',
-        body: fd
+        method: "POST",
+        body: fd,
       });
       const result = await res.json();
       if (res.status === 409) {
@@ -77,8 +126,7 @@ export default function App() {
     } catch (err) {
       console.error("Upload failed", err);
       alert("Upload failed. Please try again.");
-    }
-    finally {
+    } finally {
       setIsUploading(false); // Hide loader
     }
   };
@@ -86,15 +134,15 @@ export default function App() {
   const validateFiles = (files) => {
     if (!files || files.length === 0) return;
     // Validate the number of files
-    if ((files.length > 5)) {
-      alert('You can only upload up to 5 files at a time');
+    if (files.length > 5) {
+      alert("You can only upload up to 5 files at a time");
       return false;
     }
 
     // Validate the file size
     for (let f of files) {
       if (f.size > 1024 * 1024 * 500) {
-        alert('File size exceeds 500MB');
+        alert("File size exceeds 500MB");
         return false;
       }
     }
@@ -102,10 +150,12 @@ export default function App() {
   };
 
   const onClear = async () => {
-    const confirm = window.confirm('Are you sure you want to clear the folder?');
+    const confirm = window.confirm(
+      "Are you sure you want to clear the folder?",
+    );
     if (!confirm) return;
     try {
-      await fetch(`${API}/clear/${userName}`, { method: 'DELETE' });
+      await fetch(`${API}/clear/${userName}`, { method: "DELETE" });
       setSelected(null);
       updateVideoList();
     } catch (err) {
@@ -113,14 +163,16 @@ export default function App() {
     }
   };
 
-
   const onDeleteVideo = async (filename) => {
     const confirm = window.confirm(`Delete "${filename}"?`);
     if (!confirm) return;
     try {
-      const res = await fetch(`${API}/delete-video/${userName}/${encodeURIComponent(filename)}`, {
-        method: 'DELETE',
-      });
+      const res = await fetch(
+        `${API}/delete-video/${userName}/${encodeURIComponent(filename)}`,
+        {
+          method: "DELETE",
+        },
+      );
 
       if (res.ok) {
         if (selected === filename) setSelected(null);
@@ -134,12 +186,13 @@ export default function App() {
     setHighlightedFile(name);
     setTimeout(() => setHighlightedFile(null), 2000);
   };
+
   const handleSelectFolder = () => {
     const folderName = window.prompt("Enter the folder name");
     if (folderName && folderName.trim() !== "") {
       const newUrl = new URL(window.location.href);
       newUrl.pathname = `/${folderName.trim()}`;
-      newUrl.searchParams.set('uploader', 'true');
+      newUrl.searchParams.set("uploader", "true");
       window.location.href = newUrl.toString();
     }
   };
@@ -160,7 +213,7 @@ export default function App() {
     textArea.select();
 
     try {
-      const successful = document.execCommand('copy');
+      const successful = document.execCommand("copy");
       if (successful) triggerHighlight(filename);
     } catch (err) {
       console.error("Fallback copy failed", err);
@@ -168,133 +221,181 @@ export default function App() {
 
     document.body.removeChild(textArea);
   };
-  // Inside App.js
-  const onDownloadVideo = async (start, end) => {
-    if (!selected) return;
 
-    // Append start and end timestamps safely into the endpoint search parameters query
-    const url = `${API}/download-video/${userName}/${encodeURIComponent(selected)}?start=${start}&end=${end}`;
+  const onDownloadVideo = (filename = selected, { start, end } = {}) => {
+    if (!filename) return;
 
+    const hasTimestamps = start !== undefined && end !== undefined;
+    const query = hasTimestamps ? `?start=${start}&end=${end}` : "";
+    const url = `${API}/download-video/${userName}/${encodeURIComponent(filename)}${query}`;
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.click();
+  };
+
+  const handleRenameVideo = async (oldFilename, newFilename) => {
     try {
-      setIsUploading(true);
+      const response = await fetch(`${API}/rename-video/${userName}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ oldFilename, newFilename }),
+      });
 
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('Download request rejected by server.');
-
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = `trimmed-${selected}`;
-      document.body.appendChild(link);
-      link.click();
-
-      link.remove();
-      URL.revokeObjectURL(blobUrl);
+      if (response.ok) {
+        // Refresh list or slice file array state locally
+        fetchVideoList();
+      } else {
+        const data = await response.json();
+        alert(`Error updating file name: ${data.error}`);
+      }
     } catch (err) {
-      console.error("Trim extraction download sequence aborted:", err);
-      alert('Failed to download the trimmed file selection.');
-    } finally {
-      setIsUploading(false); // Clear screen loader overlay
+      console.error("Network problem mapping rename transaction", err);
     }
   };
   return (
-    <div style={{ display: 'flex', height: '100vh', fontFamily: 'system-ui', color: '#333' }}>
+    <div
+      style={{
+        display: "flex",
+        height: "100vh",
+        fontFamily: "system-ui",
+        color: "#333",
+      }}
+    >
       {/* LEFT PANEL */}
-      <div style={{ width: '300px', borderRight: '2px solid #eee', padding: '20px', background: '#fcfcfc' }}>
-        {
-          isUploader && (
-            <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <a style={{
-                  margin: '0',
-                  textDecoration: 'none',
-                  color: '#333',
-                  fontSize: '1.2rem',
-                  fontWeight: 'bold',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }} href={`/public`}>Upload Panel</a>
-                <a style={{
-                  background: 'none',
-                  border: '1px solid #007bff',
-                  borderRadius: '5px',
-                  textDecoration: 'none',
-                  padding: '0 5px'
-                }} href={`/${userName}`}>
-                  <EyeIcon color='#007bff' />
-                </a>
+      <div
+        style={{
+          width: "300px",
+          borderRight: "2px solid #eee",
+          padding: "20px",
+          overflowY: "auto",
+          background: "#fcfcfc",
+        }}
+      >
+        {isUploader && (
+          <>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <a
+                style={{
+                  margin: "0",
+                  textDecoration: "none",
+                  color: "#333",
+                  fontSize: "1.2rem",
+                  fontWeight: "bold",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                }}
+                href={`/public`}
+              >
+                Upload Panel
+              </a>
+              <a
+                style={{
+                  background: "none",
+                  border: "1px solid #007bff",
+                  borderRadius: "5px",
+                  textDecoration: "none",
+                  padding: "0 5px",
+                }}
+                href={`/${userName}`}
+              >
+                <EyeIcon color="#007bff" />
+              </a>
+            </div>
+            <div style={{ height: "200px" }}>
+              <FileUploader onUploadFiles={uploadFiles} />
+            </div>
+          </>
+        )}
 
-
-              </div>
-              <div style={{ height: '200px' }}>
-                <FileUploader
-                  onUploadFiles={uploadFiles}
-                />
-              </div>
-            </>
-          )
-        }
-
-        <div style={{ marginTop: '10px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <div style={{
-                cursor: 'pointer',
-                padding: '0px 4px',
-                border: '1px solid #ccc',
-                borderRadius: '5px'
-              }} onClick={handleSelectFolder}>
+        <div style={{ marginTop: "10px" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <div
+                style={{
+                  cursor: "pointer",
+                  padding: "0px 4px",
+                  border: "1px solid #ccc",
+                  borderRadius: "5px",
+                }}
+                onClick={handleSelectFolder}
+              >
                 <FolderIcon />
               </div>
-              <span style={{ color: '#007bff' }}>
-                {userName === 'public' ? <GlobeIcon /> : userName}
-              </span> videos ({videos.length})
+              <span style={{ color: "#007bff" }}>
+                {userName === "public" ? <GlobeIcon /> : userName}
+              </span>{" "}
+              videos ({videos.length})
             </div>
-            {
-              !isUploader && (
-                <a href={`/${userName}?uploader=true`}
-                  style={{
-                    textDecoration: 'none'
-                  }}>
-                  <UploadIcon />
-                </a>
-              )
-
-            }
-            {
-              isUploader && (
-                <button onClick={onClear} style={{
-                  padding: '5px',
-                  background: 'none',
-                  border: '1px solid red',
-                  color: 'red',
-                  borderRadius: '5px'
-                }}>
-                  Clear
-                </button>
-              )
-            }
+            {!isUploader && (
+              <a
+                href={`/${userName}?uploader=true`}
+                style={{
+                  textDecoration: "none",
+                }}
+              >
+                <UploadIcon />
+              </a>
+            )}
+            {isUploader && (
+              <button
+                onClick={onClear}
+                style={{
+                  padding: "5px",
+                  background: "none",
+                  border: "1px solid red",
+                  color: "red",
+                  borderRadius: "5px",
+                }}
+              >
+                Clear
+              </button>
+            )}
           </div>
           {videos.map((v) => (
             <VideoItem
               isHighlighted={highlightedFile === v}
-              key={v}
-              filename={v}
-              isSelected={selected === v}
+              key={v.name}
+              file={v}
+              jobStatus={activeJobs[v.name]}
+              isSelected={selected === v.name}
               isUploader={isUploader}
+              onRename={(oldName, newName) =>
+                handleRenameVideo(oldName, newName)
+              }
               onShareLink={(name) => onShareLink(name)}
               onSelect={(name) => setSelected(name)}
               onDelete={(name) => onDeleteVideo(name)}
+              onDownload={onDownloadVideo}
             />
           ))}
         </div>
       </div>
 
       {/* RIGHT PANEL */}
-      <div style={{ flex: 1, padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000' }}>
+      <div
+        style={{
+          flex: 1,
+          padding: "10px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "#000",
+        }}
+      >
         {selected ? (
           <VideoCutterPlayer
             selectedVideo={selected}
@@ -303,7 +404,7 @@ export default function App() {
             onDownload={onDownloadVideo}
           />
         ) : (
-          <div style={{ padding: '0px 20px', height: '90%', width: '100%' }}>
+          <div style={{ padding: "0px 20px", height: "90%", width: "100%" }}>
             <FileUploader onUploadFiles={uploadFiles} />
           </div>
         )}
