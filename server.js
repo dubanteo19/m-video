@@ -29,10 +29,11 @@ app.use('/stream/:user', (req, res, next) => {
 });
 
 // Absolute path to your existing executable
-const FFMPEG_PATH = 'C:\\Users\\ISV51\\AppData\\Local\\Learnpulse\\Screenpresso\\FFmpeg\\ffmpeg.exe';
-
+const FFMPEG_PATH = 'C:\\Users\\ISV51\\ffmpeg\\bin\\ffmpeg.exe';
+const FFMPEG_PROBE_PATH = 'C:\\Users\\ISV51\\ffmpeg\\bin\\ffprobe.exe';
 const videoQueue = new VideoQueue({
   ffmpegPath: FFMPEG_PATH,
+  ffprobePath: FFMPEG_PROBE_PATH,
   baseUploadDir: BASE_UPLOAD_DIR,
   concurrency: 1
 });

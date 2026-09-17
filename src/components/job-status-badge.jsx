@@ -3,9 +3,8 @@ import React from "react";
 export function JobStatusBadge({ jobStatus }) {
   if (!jobStatus) return null;
 
-  const { status, queuePosition, time, error } = jobStatus;
+  const { status, queuePosition, progress, error } = jobStatus;
 
-  // Configuration map for styles, icons, and labels
   const statusConfig = {
     queued: {
       bg: "#f3f4f6",
@@ -26,6 +25,7 @@ export function JobStatusBadge({ jobStatus }) {
         </svg>
       ),
     },
+
     processing: {
       bg: "#eff6ff",
       color: "#1d4ed8",
@@ -46,25 +46,15 @@ export function JobStatusBadge({ jobStatus }) {
         </svg>
       ),
     },
+
     progress: {
       bg: "#e0f2fe",
       color: "#0369a1",
       border: "#bae6fd",
-      label: time || "Compressing...",
+      label: "Compressing...",
       animated: true,
-      icon: (
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-        >
-          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-        </svg>
-      ),
     },
+
     failed: {
       bg: "#fef2f2",
       color: "#dc2626",
@@ -90,17 +80,35 @@ export function JobStatusBadge({ jobStatus }) {
 
   const config = statusConfig[status] || statusConfig.queued;
 
+  const progressValue = Math.min(100, Math.max(0, progress ?? 0));
+
   return (
     <>
-      {/* Inline styles for CSS keyframe animation */}
       <style>
         {`
           @keyframes spin {
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
           }
+
           .spin {
             animation: spin 1s linear infinite;
+          }
+
+          .job-progress-bar {
+            position: relative;
+            width: 70px;
+            height: 5px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: #bae6fd;
+          }
+
+          .job-progress-value {
+            height: 100%;
+            border-radius: inherit;
+            background: #0284c7;
+            transition: width 0.3s ease;
           }
         `}
       </style>
@@ -110,7 +118,7 @@ export function JobStatusBadge({ jobStatus }) {
         style={{
           display: "inline-flex",
           alignItems: "center",
-          gap: "5px",
+          gap: "6px",
           padding: "3px 8px",
           borderRadius: "12px",
           fontSize: "0.72rem",
@@ -120,12 +128,29 @@ export function JobStatusBadge({ jobStatus }) {
           color: config.color,
           border: `1px solid ${config.border}`,
           whiteSpace: "nowrap",
-          fontVariantNumeric: "tabular-nums", // Prevents text jitter as time changes
+          fontVariantNumeric: "tabular-nums",
           transition: "all 0.2s ease-in-out",
         }}
       >
-        {config.icon}
-        <span>{config.label}</span>
+        {status === "progress" ? (
+          <>
+            <div className="job-progress-bar">
+              <div
+                className="job-progress-value"
+                style={{
+                  width: `${progressValue}%`,
+                }}
+              />
+            </div>
+
+            <span>{progressValue}%</span>
+          </>
+        ) : (
+          <>
+            {config.icon}
+            <span>{config.label}</span>
+          </>
+        )}
       </div>
     </>
   );
